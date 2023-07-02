@@ -6,4 +6,8 @@ public class Constants {
         public static final String GHANA = "Ghana";
         public static final String ITALY = "Italy";
     }
+
+    public static class ResponseMessage {
+
+    }
 }

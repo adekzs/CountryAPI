@@ -1,16 +1,18 @@
 package com.klasha.country.utils;
 
+import org.springframework.stereotype.Component;
+
 import java.io.BufferedReader;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 
+@Component
 public class Utility {
 
-    public static HashMap<String, Double> readFileCSV() {
+    public  HashMap<String, Double> readFileCSV() {
         HashMap<String, Double> currencies = new HashMap<>();
         try (BufferedReader br = new BufferedReader(new FileReader("/Users/m.afolabi/Documents/cresters/Test Application/src/main/resources/exchange_rate.csv"))) {
             String line;
@@ -21,15 +23,13 @@ public class Utility {
                 double amount = getAmountFromArray(values);
                 currencies.put(curr, amount);
             }
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
         return currencies;
     }
 
-    private static double getAmountFromArray(String[] values) {
+    private  double getAmountFromArray(String[] values) {
         String amount = Arrays.stream(values)
                 .skip(2)
                 .collect(Collectors.joining(""));

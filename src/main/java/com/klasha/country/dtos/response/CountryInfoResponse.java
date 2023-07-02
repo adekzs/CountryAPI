@@ -13,8 +13,8 @@ public class CountryInfoResponse {
 
     private double population;
     private String capitalCity;
-    private Location location;
     private String currency;
     private ISO iso;
+    private Location location;
 
 }

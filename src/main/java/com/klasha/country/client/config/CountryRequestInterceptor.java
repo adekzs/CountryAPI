@@ -9,6 +9,5 @@ public class CountryRequestInterceptor implements RequestInterceptor {
     @Override
     public void apply(RequestTemplate requestTemplate) {
         log.info("Path is: "+ requestTemplate.path());
-//        requestTemplate.header("Accept",)
     }
 }

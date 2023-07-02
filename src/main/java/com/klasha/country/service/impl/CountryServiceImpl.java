@@ -1,7 +1,8 @@
 package com.klasha.country.service.impl;
 
-import com.klasha.country.CurrencyTable;
+import com.klasha.country.utils.CurrencyTable;
 import com.klasha.country.client.api.CountryAPI;
+import com.klasha.country.dtos.global.CountryAPIResponse;
 import com.klasha.country.dtos.global.ISO;
 import com.klasha.country.dtos.global.Location;
 import com.klasha.country.dtos.request.CityRequest;
@@ -11,11 +12,14 @@ import com.klasha.country.dtos.response.*;
 import com.klasha.country.service.CountryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 import static com.klasha.country.client.constants.Constants.Country.*;
 
@@ -25,6 +29,7 @@ import static com.klasha.country.client.constants.Constants.Country.*;
 public class CountryServiceImpl implements CountryService {
 
     private final CountryAPI countryAPI;
+    private final TaskExecutor taskExecutor;
     private final CurrencyTable currencyTable;
 
     @Override
@@ -32,27 +37,34 @@ public class CountryServiceImpl implements CountryService {
 
         CountryRequest req = new CountryRequest();
         req.setCountry(country);
-        var countryLocation = countryAPI.getCountryLocation(req);
-        var countryCurrency = countryAPI.getCountryCurrency(req);
-        var countryPopulation = countryAPI.getCountryPopulation(req);
-        var capitalCity = countryAPI.getCountryCapital(req);
-        int size = Objects.requireNonNull(countryPopulation.getBody()).getData().getPopulationCounts().size();
-        CountryInfoResponse resp = CountryInfoResponse.builder()
-                .currency(Objects.requireNonNull(countryCurrency.getBody()).getData().getCurrency())
-                .capitalCity(Objects.requireNonNull(capitalCity.getBody()).getData().getCapital())
-                .location(Location.builder()
-                        .lat(Objects.requireNonNull(countryLocation.getBody()).getData().getLat())
-                        .log(countryLocation.getBody().getData().getLog()).
-                        build())
-                .population(countryPopulation.getBody().getData().getPopulationCounts().get(size - 1).getValue())
-                .iso(ISO.builder()
-                        .iso2(countryCurrency.getBody().getData().getIso2())
-                        .iso3(countryCurrency.getBody().getData().getIso3()).build())
-                .build();
+        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryLocation>>> countryLocation =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryLocation(req));
+        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryCapital>>> capitalCity =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryCapital(req));
+        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryPopulation>>> countryPopulation =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryPopulation(req));
+        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryCurrency>>> countryCurrency =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryCurrency(req));
 
-        log.info(countryLocation);
-        log.info(resp);
-        return resp;
+        return CompletableFuture.allOf(countryLocation, countryCurrency, countryPopulation, capitalCity)
+                .thenApplyAsync(voidR -> {
+                    int size = 0;
+                    size = Objects.requireNonNull(countryPopulation.join().getBody()).getData().getPopulationCounts().size();
+
+                    return CountryInfoResponse.builder()
+                            .currency(Objects.requireNonNull(countryCurrency.join().getBody()).getData().getCurrency())
+                            .capitalCity(Objects.requireNonNull(capitalCity.join().getBody()).getData().getCapital())
+                            .location(Location.builder()
+                                    .lat(Objects.requireNonNull(countryLocation.join().getBody()).getData().getLat())
+                                    .log(Objects.requireNonNull(countryLocation.join().getBody()).getData().getLog()).
+                                    build())
+                            .population(Objects.requireNonNull(countryPopulation.join().getBody()).getData().getPopulationCounts().get(size - 1).getValue())
+                            .iso(ISO.builder()
+                                    .iso2(Objects.requireNonNull(countryCurrency.join().getBody()).getData().getIso2())
+                                    .iso3(Objects.requireNonNull(countryCurrency.join().getBody()).getData().getIso3()).build())
+                            .build();
+                }).join();
+
     }
 
     @Override
@@ -61,23 +73,37 @@ public class CountryServiceImpl implements CountryService {
         CountryRequest req = new CountryRequest();
         req.setCountry(country);
         var states = countryAPI.getCountryStates(req);
+        List<CompletableFuture<CityAndStates.State>> futures = new ArrayList<>();
         for (var state : Objects.requireNonNull(states.getBody()).getData().getStates()) {
-            try {
-                var cities = countryAPI.getStateCities(CityRequest.builder()
-                        .country(country)
-                        .state(state.getName())
-                        .build());
-                cityAndStates.getStates()
-                        .add(CityAndStates.State.builder()
-                                .cities(Objects.requireNonNull(cities.getBody()).getData())
-                                .state(state.getName())
-                                .build());
-            } catch (Exception ex) {
-                log.info("Erro fetching cities for " + state.getName());
-                log.error(ex.getMessage());
+            CompletableFuture<CityAndStates.State> stateWithCities =
+                    CompletableFuture.supplyAsync(() -> countryAPI.getStateCities(CityRequest.builder()
+                                    .country(country)
+                                    .state(state.getName())
+                                    .build()),taskExecutor)
+                            .thenApplyAsync(t -> {
+                                var resp = Objects.requireNonNull(t.getBody()).getData();
+                                return CityAndStates.State.builder()
+                                        .cities(resp)
+                                        .state(state.getName())
+                                        .build();
 
-            }
+                            }, taskExecutor)
+                            .exceptionally(ex -> {
+                                log.info("Error fetching cities for " + state.getName());
+                                log.error("Received exception {}, throwing new exception!", ex.getMessage());
+                                throw new IllegalArgumentException();
+                            });
+            futures.add(stateWithCities);
         }
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApplyAsync(ft -> {
+                            futures.forEach(t -> cityAndStates.getStates()
+                                    .add(t.join()));
+                            return ft;
+                        }, taskExecutor)
+                .join();
+
         return cityAndStates;
     }
 
@@ -114,26 +140,37 @@ public class CountryServiceImpl implements CountryService {
                 .builder()
                 .country(NEW_ZEALAND)
                 .build();
-
-        var ghanaCitiesPopulation = countryAPI.getCitiesPopulation(ghana);
-        var italyCitiesPopulation = countryAPI.getCitiesPopulation(italy);
-        var newZealandPopulation = countryAPI.getCitiesPopulation(newZealand);
-
-        sortCitiesByPopulation(Objects.requireNonNull(ghanaCitiesPopulation.getBody()).getData());
-        sortCitiesByPopulation(Objects.requireNonNull(italyCitiesPopulation.getBody()).getData());
-        sortCitiesByPopulation(Objects.requireNonNull(newZealandPopulation.getBody()).getData());
-
-        ghanaCitiesPopulation.getBody().getData().stream()
-                .limit(noOfCities)
-                .forEach(city -> response.getGhana().getCities().add(getCityInfoFromCity(city)));
-        italyCitiesPopulation.getBody().getData().stream()
-                .limit(noOfCities)
-                .forEach(city -> response.getItaly().getCities().add(getCityInfoFromCity(city)));
-        newZealandPopulation.getBody().getData().stream()
-                .limit(noOfCities)
-                .forEach(city -> response.getNewZealand().getCities().add(getCityInfoFromCity(city)));
-
-        return response;
+        CompletableFuture<ResponseEntity<CountryAPIResponse<List<CityPopulation>>>> ghanaCitiesPopulation =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCitiesPopulation(ghana), taskExecutor)
+                        .thenApplyAsync(x -> {
+                            sortCitiesByPopulation(Objects.requireNonNull(x.getBody()).getData());
+                            return x;
+                        });
+        CompletableFuture<ResponseEntity<CountryAPIResponse<List<CityPopulation>>>> italyCitiesPopulation =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCitiesPopulation(italy), taskExecutor)
+                        .thenApplyAsync(x -> {
+                            sortCitiesByPopulation(Objects.requireNonNull(x.getBody()).getData());
+                            return x;
+                        });
+        CompletableFuture<ResponseEntity<CountryAPIResponse<List<CityPopulation>>>> newZealandPopulation =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCitiesPopulation(newZealand), taskExecutor)
+                        .thenApplyAsync(x -> {
+                            sortCitiesByPopulation(Objects.requireNonNull(x.getBody()).getData());
+                            return x;
+                        });
+        return CompletableFuture.allOf(ghanaCitiesPopulation, italyCitiesPopulation, newZealandPopulation)
+                .thenApplyAsync(f -> {
+                    Objects.requireNonNull(ghanaCitiesPopulation.join().getBody()).getData().stream()
+                            .limit(noOfCities)
+                            .forEach(city -> response.getGhana().getCities().add(getCityInfoFromCity(city)));
+                    Objects.requireNonNull(italyCitiesPopulation.join().getBody()).getData().stream()
+                            .limit(noOfCities)
+                            .forEach(city -> response.getItaly().getCities().add(getCityInfoFromCity(city)));
+                    Objects.requireNonNull(newZealandPopulation.join().getBody()).getData().stream()
+                            .limit(noOfCities)
+                            .forEach(city -> response.getNewZealand().getCities().add(getCityInfoFromCity(city)));
+                    return response;
+                }, taskExecutor).join();
     }
 
     @Override
@@ -144,12 +181,12 @@ public class CountryServiceImpl implements CountryService {
                 .country(country)
                 .build());
         String countryCurrency = Objects.requireNonNull(currencyInfo.getBody()).getData().getCurrency();
-        String countryCurrency2 = countryCurrency+"-"+info.getCurrency();
+        String countryCurrency2 = countryCurrency + "-" + info.getCurrency();
         double rate = currencyData.get(countryCurrency2);
         double convertedAmount = info.getAmount() / rate;
         return Currency
                 .builder()
-                .amount(info.getCurrency()+convertedAmount)
+                .amount(info.getCurrency() + convertedAmount)
                 .countryCurr(countryCurrency)
                 .build();
     }
