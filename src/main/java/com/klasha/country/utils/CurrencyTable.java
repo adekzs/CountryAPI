@@ -1,6 +1,5 @@
 package com.klasha.country.utils;
 
-import com.klasha.country.utils.Utility;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;

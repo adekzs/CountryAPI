@@ -1,11 +1,16 @@
 package com.klasha.country.dtos.request;
 
-import lombok.Data;
 
-import java.math.BigDecimal;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 @Data
 public class CurrencyInfo {
+
+    @NotBlank(message = "currency should be present")
     private String currency;
-    private double amount;
+
+    @NotNull(message = "amount should be present")
+    private Double amount;
 }

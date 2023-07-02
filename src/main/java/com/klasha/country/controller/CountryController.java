@@ -3,6 +3,7 @@ package com.klasha.country.controller;
 import com.klasha.country.dtos.global.ApiResponse;
 import com.klasha.country.dtos.request.CurrencyInfo;
 import com.klasha.country.service.CountryService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -61,7 +62,7 @@ public class CountryController {
     @PostMapping("convert")
     public ResponseEntity<ApiResponse<?>> convertCurrency(
             @RequestParam String country,
-            @RequestBody CurrencyInfo info
+            @Valid  @RequestBody CurrencyInfo info
              ) {
         Instant start = Instant.now();
         var conversion = countryService.convertCurrency(country, info);

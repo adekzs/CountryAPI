@@ -1,5 +1,7 @@
 package com.klasha.country.service.impl;
 
+import com.klasha.country.exception.CustomException;
+import com.klasha.country.exception.NotFoundException;
 import com.klasha.country.utils.CurrencyTable;
 import com.klasha.country.client.api.CountryAPI;
 import com.klasha.country.dtos.global.CountryAPIResponse;
@@ -13,6 +15,7 @@ import com.klasha.country.service.CountryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -37,31 +40,49 @@ public class CountryServiceImpl implements CountryService {
 
         CountryRequest req = new CountryRequest();
         req.setCountry(country);
-        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryLocation>>> countryLocation =
-                CompletableFuture.supplyAsync(() -> countryAPI.getCountryLocation(req));
-        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryCapital>>> capitalCity =
-                CompletableFuture.supplyAsync(() -> countryAPI.getCountryCapital(req));
-        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryPopulation>>> countryPopulation =
-                CompletableFuture.supplyAsync(() -> countryAPI.getCountryPopulation(req));
-        CompletableFuture<ResponseEntity<CountryAPIResponse<CountryCurrency>>> countryCurrency =
-                CompletableFuture.supplyAsync(() -> countryAPI.getCountryCurrency(req));
+        CompletableFuture<CountryLocation> countryLocation =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryLocation(req))
+                        .thenApplyAsync(locationResponse -> Objects.requireNonNull(locationResponse.getBody()).getData())
+                        .exceptionally(ex -> {
+                            throw new NotFoundException("Country not found");
+                        });
+
+        CompletableFuture<CountryCapital> capitalCity =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryCapital(req))
+                        .thenApplyAsync(capitalResponse -> Objects.requireNonNull(capitalResponse.getBody()).getData())
+                        .exceptionally(ex -> {
+                            throw new NotFoundException("Capital Not found");
+                        });
+
+        CompletableFuture<CountryPopulation> countryPopulation =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryPopulation(req))
+                        .thenApplyAsync(populationResponse -> Objects.requireNonNull(populationResponse.getBody()).getData())
+                        .exceptionally(ex -> {
+                            throw new NotFoundException("Population not found");
+                        });
+        CompletableFuture<CountryCurrency> countryCurrency =
+                CompletableFuture.supplyAsync(() -> countryAPI.getCountryCurrency(req))
+                        .thenApplyAsync(currencyResponse -> Objects.requireNonNull(currencyResponse.getBody()).getData())
+                        .exceptionally(ex -> {
+                            throw new NotFoundException("Currency not found");
+                        });;
 
         return CompletableFuture.allOf(countryLocation, countryCurrency, countryPopulation, capitalCity)
                 .thenApplyAsync(voidR -> {
-                    int size = 0;
-                    size = Objects.requireNonNull(countryPopulation.join().getBody()).getData().getPopulationCounts().size();
+                    int size = countryPopulation.join().getPopulationCounts().size();
 
                     return CountryInfoResponse.builder()
-                            .currency(Objects.requireNonNull(countryCurrency.join().getBody()).getData().getCurrency())
-                            .capitalCity(Objects.requireNonNull(capitalCity.join().getBody()).getData().getCapital())
+                            .currency(countryCurrency.join().getCurrency())
+                            .capitalCity(capitalCity.join().getCapital())
                             .location(Location.builder()
-                                    .lat(Objects.requireNonNull(countryLocation.join().getBody()).getData().getLat())
-                                    .log(Objects.requireNonNull(countryLocation.join().getBody()).getData().getLog()).
-                                    build())
-                            .population(Objects.requireNonNull(countryPopulation.join().getBody()).getData().getPopulationCounts().get(size - 1).getValue())
+                                    .lat(countryLocation.join().getLat())
+                                    .log(countryLocation.join().getLog())
+                                            .build())
+                            .population(countryPopulation.join().getPopulationCounts().get(size - 1).getValue())
                             .iso(ISO.builder()
-                                    .iso2(Objects.requireNonNull(countryCurrency.join().getBody()).getData().getIso2())
-                                    .iso3(Objects.requireNonNull(countryCurrency.join().getBody()).getData().getIso3()).build())
+                                    .iso2(countryCurrency.join().getIso2())
+                                    .iso3(countryCurrency.join().getIso3())
+                                    .build())
                             .build();
                 }).join();
 
@@ -91,7 +112,10 @@ public class CountryServiceImpl implements CountryService {
                             .exceptionally(ex -> {
                                 log.info("Error fetching cities for " + state.getName());
                                 log.error("Received exception {}, throwing new exception!", ex.getMessage());
-                                throw new IllegalArgumentException();
+                                return CityAndStates.State.builder()
+                                        .cities(new ArrayList<String>())
+                                        .state(state.getName())
+                                        .build();
                             });
             futures.add(stateWithCities);
         }
@@ -182,13 +206,17 @@ public class CountryServiceImpl implements CountryService {
                 .build());
         String countryCurrency = Objects.requireNonNull(currencyInfo.getBody()).getData().getCurrency();
         String countryCurrency2 = countryCurrency + "-" + info.getCurrency();
-        double rate = currencyData.get(countryCurrency2);
-        double convertedAmount = info.getAmount() / rate;
-        return Currency
-                .builder()
-                .amount(info.getCurrency() + convertedAmount)
-                .countryCurr(countryCurrency)
-                .build();
+        try {
+            double rate = currencyData.get(countryCurrency2);
+            double convertedAmount = info.getAmount() / rate;
+            return Currency
+                    .builder()
+                    .amount(info.getCurrency() + convertedAmount)
+                    .countryCurr(countryCurrency)
+                    .build();
+        } catch (Exception ex) {
+            throw new CustomException("Exchange not available", HttpStatus.NOT_FOUND);
+        }
     }
 
     private TopCities.CityInfo getCityInfoFromCity(CityPopulation city) {
