@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -78,6 +79,17 @@ public class ExceptionHandlers {
         ErrorApiResponse response = ErrorApiResponse.builder()
                 .error(true)
                 .msg(errors)
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ResponseEntity<ErrorApiResponse> handleMessageNotReadableException(final HttpMessageNotReadableException exception) {
+        final String error = exception.getMessage();
+        ErrorApiResponse response = ErrorApiResponse.builder()
+                .error(true)
+                .msg(error)
                 .build();
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);

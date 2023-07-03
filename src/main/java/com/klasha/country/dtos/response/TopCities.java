@@ -18,13 +18,18 @@ public class TopCities {
     private City ghana;
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class City {
+
         private List<CityInfo> cities;
 
     }
 
     @Builder
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class CityInfo {
         private String name;
         private String population;

@@ -1,5 +1,6 @@
 package com.klasha.country.service.impl;
 
+import com.klasha.country.dtos.response.TopCities.City;
 import com.klasha.country.exception.CustomException;
 import com.klasha.country.exception.NotFoundException;
 import com.klasha.country.utils.CurrencyTable;
@@ -24,7 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
-import static com.klasha.country.client.constants.Constants.Country.*;
+import static com.klasha.country.constants.Constants.Country.*;
 
 @RequiredArgsConstructor
 @Service
@@ -36,7 +37,7 @@ public class CountryServiceImpl implements CountryService {
     private final CurrencyTable currencyTable;
 
     @Override
-    public CountryInfoResponse getLocation(String country) {
+    public CountryInfoResponse getInformation(String country) {
 
         CountryRequest req = new CountryRequest();
         req.setCountry(country);
@@ -135,18 +136,15 @@ public class CountryServiceImpl implements CountryService {
     public TopCities getTopCities(int noOfCities) {
 
         TopCities response = TopCities.builder()
-                .ghana(TopCities
-                        .City
+                .ghana(City
                         .builder()
                         .cities(new ArrayList<>())
                         .build())
-                .italy(TopCities
-                        .City
+                .italy(City
                         .builder()
                         .cities(new ArrayList<>())
                         .build())
-                .newZealand(TopCities
-                        .City
+                .newZealand(City
                         .builder()
                         .cities(new ArrayList<>())
                         .build())
@@ -207,8 +205,16 @@ public class CountryServiceImpl implements CountryService {
         String countryCurrency = Objects.requireNonNull(currencyInfo.getBody()).getData().getCurrency();
         String countryCurrency2 = countryCurrency + "-" + info.getCurrency();
         try {
-            double rate = currencyData.get(countryCurrency2);
-            double convertedAmount = info.getAmount() / rate;
+            double rate = 0.0;
+            double  convertedAmount = 0.0;
+            if (currencyData.get(countryCurrency2) != null) {
+                 rate = currencyData.get(countryCurrency2);
+                 convertedAmount = info.getAmount() / rate;
+            } else {
+                 countryCurrency2 = info.getCurrency()+ "-" + countryCurrency;
+                 rate = currencyData.get(countryCurrency2);
+                 convertedAmount = info.getAmount() * rate;
+            }
             return Currency
                     .builder()
                     .amount(info.getCurrency() + convertedAmount)

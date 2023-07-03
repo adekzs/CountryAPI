@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Duration;
 import java.time.Instant;
 
+import static com.klasha.country.constants.Constants.ResponseMessage.*;
+
 @RestController
 @RequestMapping("country")
 @RequiredArgsConstructor
@@ -20,12 +22,13 @@ public class CountryController {
     @GetMapping
     public ResponseEntity<?> getCountryInfo(@RequestParam String country) {
         Instant start = Instant.now();
-        var data = countryService.getLocation(country);
+        var data = countryService.getInformation(country);
         Instant end = Instant.now();
         Duration timeElapsed = Duration.between(start, end);
         return ResponseEntity.ok()
                 .body(ApiResponse.builder()
                         .error(false)
+                        .msg(COUNTRY_INFO_SUCCESS)
                         .time(String.valueOf(timeElapsed.toMillis()/1000.0))
                         .data(data)
                         .build());
@@ -40,6 +43,7 @@ public class CountryController {
         return ResponseEntity.ok()
                 .body(ApiResponse.builder()
                         .error(false)
+                        .msg(COUNTRY_AND_STATES_SUCCESS)
                         .time(String.valueOf(timeElapsed.toMillis()/1000.0))
                         .data(data)
                         .build());
@@ -54,6 +58,7 @@ public class CountryController {
         return ResponseEntity.ok()
                 .body(ApiResponse.builder()
                         .error(false)
+                        .msg(POPULATION_SUCCESS)
                         .time(String.valueOf(timeElapsed.toMillis()/1000.0))
                         .data(topCities)
                         .build());
@@ -71,6 +76,7 @@ public class CountryController {
         return ResponseEntity.ok()
                 .body(ApiResponse.builder()
                         .error(false)
+                        .msg(EXCHANGE_MESSAGE)
                         .time(String.valueOf(timeElapsed.toMillis()/1000.0))
                         .data(conversion)
                         .build());

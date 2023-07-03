@@ -16,6 +16,8 @@ public class CityAndStates {
     private List<State> states;
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class State {
         private String state;
         private List<String> cities;

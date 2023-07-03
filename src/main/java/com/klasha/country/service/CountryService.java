@@ -9,7 +9,7 @@ import com.klasha.country.dtos.response.TopCities;
 
 public interface CountryService {
 
-    CountryInfoResponse getLocation(String country);
+    CountryInfoResponse getInformation(String country);
 
     CityAndStates getStatesAndCities(String country);
 
