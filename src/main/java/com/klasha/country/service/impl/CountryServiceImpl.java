@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -215,9 +216,13 @@ public class CountryServiceImpl implements CountryService {
                  rate = currencyData.get(countryCurrency2);
                  convertedAmount = info.getAmount() * rate;
             }
+            DecimalFormat decimalFormat = new DecimalFormat("#0.00");
+
+            // Format the double value
+            String formattedNumber = decimalFormat.format(convertedAmount);
             return Currency
                     .builder()
-                    .amount(info.getCurrency() + convertedAmount)
+                    .amount(info.getCurrency() + formattedNumber)
                     .countryCurr(countryCurrency)
                     .build();
         } catch (Exception ex) {
