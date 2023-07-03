@@ -1,10 +1,10 @@
 package com.klasha.country.utils;
 
+import jakarta.annotation.Resource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.stream.Collectors;
@@ -12,9 +12,12 @@ import java.util.stream.Collectors;
 @Component
 public class Utility {
 
-    public  HashMap<String, Double> readFileCSV() {
+    public  HashMap<String, Double> readFileCSV() throws IOException {
         HashMap<String, Double> currencies = new HashMap<>();
-        try (BufferedReader br = new BufferedReader(new FileReader("/Users/m.afolabi/Documents/cresters/Test Application/src/main/resources/exchange_rate.csv"))) {
+        InputStream resource = new ClassPathResource(
+                "exchange_rate.csv").getInputStream();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(resource))) {
+
             String line;
             br.readLine();
             while ((line = br.readLine()) != null) {
